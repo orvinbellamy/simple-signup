@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Session Details</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<!-- Bootstrap CSS -->
+	<link 
+	href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" 
+	rel="stylesheet"
+	>
+</head>
+<body class="p-4">
+	<div class="container">
+
+	<!-- Header with Title + Home Link -->
+	<div class="d-flex justify-content-between align-items-center mb-4">
+		<h1 id="session-title">Session Title</h1>
+		<div>
+			<a href="index.html" class="text-decoration-none me-3">Simple Signup</a>
+			<button
+				class="btn btn-outline-secondary"
+				id="back-to-home-btn"
+			>Back to Home</button>
+		</div>
+	</div>
+
+	<!-- Session Details -->
+	<div class="mb-4">
+		<p><strong>Hosted by:</strong> <span id="host-name">Host Name</span></p>
+		<p><strong>Location:</strong> <span id="location">Location goes here</span></p>
+		<p><strong>Date:</strong> <span id="session-date">2025-05-01</span></p>
+		<p><strong>Capacity:</strong> <span id="capacity">13</span></p>
+		<p><strong>Fee per Pax:</strong> <span id="fee">$10.00</span></p>
+	</div>
+
+	<!-- Registration Form -->
+	<div class="input-group mb-3">
+		<input type="text" id="name-input" class="form-control" placeholder="Enter your name">
+		<button class="register-button" id="main-register-button">Register</button>
+	</div>
+
+	<!-- Registrants Table -->
+	<h3>Registrants</h3>
+	<table class="table table-striped">
+		<thead>
+		<tr>
+			<th>Slot</th>
+			<th>Name</th>
+			<th>Paid</th>
+			<th>Cancel</th>
+		</tr>
+		</thead>
+		<tbody id="registrants-table-body">
+		<!-- Populated by JS -->
+		</tbody>
+	</table>
+
+	<!-- Waitlist Table -->
+	<h3>Waitlist</h3>
+	<table class="table table-striped">
+		<thead>
+		<tr>
+			<th>Name</th>
+			<th>Register</th>
+		</tr>
+		</thead>
+		<tbody id="waitlist-table-body">
+		<!-- Populated by JS -->
+		</tbody>
+	</table>
+
+	</div>
+
+	<!-- Bootstrap JS Bundle -->
+	<script 
+		src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js">
+	</script>
+
+	<script>
+
+		function getUsernameFromURL() {
+			// Try query string first
+			const params = new URLSearchParams(window.location.search);
+			const queryUsername = params.get('username');
+			
+			if (queryUsername) {
+				return decodeURIComponent(queryUsername);
+			}
+
+			// Fallback to REST-like path: /account/username
+			const pathParts = window.location.pathname.split('/');
+			if (pathParts.length >= 3 && pathParts[1] === 'account') {
+				return decodeURIComponent(pathParts[2]);
+			}
+
+			return null; // Username not found
+		}
+
+		// 1) Grab sessionId from URL
+		function getSessionId() {
+			// Try query string first
+			const params = new URLSearchParams(window.location.search);
+			const queryId = params.get('id');
+			
+			if (queryId) {
+				return decodeURIComponent(queryId);
+			}
+
+			// Fallback to REST-like path: /account/{username}/session/{id}
+			const pathParts = window.location.pathname.split('/');
+			if (pathParts.length >= 5 && pathParts[1] === 'account' && pathParts[3] === 'session') {
+				return decodeURIComponent(pathParts[4]);
+			}
+
+			return null; // session ID not found
+		}
+
+		// 2) Define a global placeholder (will be replaced with real data)
+		let sessionData = null;
+
+		// 3) Fetch session data from your API
+		async function loadSession() {
+
+			const username = getUsernameFromURL();
+			const sessionId = getSessionId();
+
+			try {
+				const res = await fetch(`https://d2mgloh4y05lpj.cloudfront.net/api/account/${username}/session/${sessionId}`, {
+					method: 'GET',
+					headers: { 'Content-Type': 'application/json' }
+				});
+				if (!res.ok) {
+					throw new Error(`Server returned ${res.status}`);
+				}
+				
+				sessionData = await res.json();
+				// Adapt property names if needed:
+				sessionData.sessionTitle = sessionData.group_name || `Session ${sessionId}`;
+				sessionData.fee = `$${Number(sessionData.fee_per_pax).toFixed(2)}`;
+				sessionData.sessionDate = sessionData.session_start.split('T')[0] || ' - ' || sessionData.session_end.split('T')[0];
+
+				// call your init/render logic
+				init();
+			} catch (err) {
+				console.error(err);
+				document.body.innerHTML = `<p class="text-danger">Failed to load session: ${err.message}</p>`;
+			}
+		}
+
+		// 4) Replace all references to sampleData with sessionData in your render functions,
+		// e.g. in init():
+		function init() {
+			document.getElementById("session-title").innerText = sessionData.sessionTitle;
+			document.getElementById("host-name").innerText = sessionData.host_name;
+			document.getElementById("location").innerText = sessionData.location;
+			document.getElementById("session-date").innerText = sessionData.sessionDate;
+			document.getElementById("capacity").innerText = sessionData.capacity;
+			document.getElementById("fee").innerText = sessionData.fee;
+
+
+			renderRegistrants();
+			renderWaitlist();
+		}
+
+		// Function to log changes to session
+		async function SessionLogUpdate(eventType, oldValue, newValue) {
+			
+			const timestamp = new Date().toISOString(); // Get the current timestamp in ISO format
+
+			// Prepare the log entry
+			const logEntry = {
+				old_value: oldValue,
+				event_type: eventType,
+				new_value: newValue,
+				timestamp: timestamp
+			};
+
+			sessionData.log.push(logEntry);
+		}
+
+		async function updateSessionData() {
+			try {
+
+				const username = getUsernameFromURL();
+
+				const response = await fetch(`https://d2mgloh4y05lpj.cloudfront.net/api/account/${username}/session/${sessionData.session_id}`, {
+					method: "PATCH",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						PK: sessionData.PK,
+						SK: sessionData.SK,
+						type: sessionData.type,
+						session_id: sessionData.session_id,
+						registration: sessionData.registration,
+						waitlist: sessionData.waitlist,
+						log: sessionData.log
+					})
+				});
+
+				const response_data = await response.json();
+
+				if (response.ok) {
+					console.log("Session updated successfully.");
+					return { status: 'success', data: response_data };
+				} else {
+					console.error("Failed to update session:", response_data);
+					alert("Failed to update the session. Please try again.");
+					return { status: 'fail', data: response_data };
+				}
+
+			} catch (error) {
+				console.error("Error updating session:", error);
+				alert("An error occurred while updating the session.");
+				return { status: 'fail', data: null };
+			}
+		}
+
+		// Render registrants table with fixed capacity rows
+		function renderRegistrants() {
+			const tbody = document.getElementById("registrants-table-body");
+			tbody.innerHTML = "";
+			for (let i = 0; i < sessionData.capacity; i++) {
+				const tr = document.createElement("tr");
+				if (i < sessionData.registration.length) {
+					const reg = sessionData.registration[i];
+					
+					if (reg.registrant_name.length > 0) {
+						tr.innerHTML = `
+							<td>${reg.slot}</td>
+							<td>${reg.registrant_name}</td>
+							<td><input type="checkbox" data-index="${i}" ${reg.paid ? "checked" : ""}></td>
+							<td><button class="cancel-btn" data-index="${i}">Cancel</button></td>
+						`;
+					} else {
+						tr.innerHTML = `
+							<td>${reg.slot}</td>
+							<td>${reg.registrant_name}</td>
+							<td></td>
+							<td></td>
+						`;
+					}
+					
+				} else {
+					tr.innerHTML = `<td colspan="2">&nbsp;</td>`;
+				}
+				tbody.appendChild(tr);
+			}
+
+			document.querySelectorAll("#registrants-table-body input[type='checkbox']").forEach(checkbox => {
+				checkbox.addEventListener("change", async (box) => {
+					const index = Number(box.target.dataset.index);
+					const paid = box.target.checked;
+					sessionData.registration[index].paid = paid;
+					
+					const new_value = sessionData.registration[index];
+					const old_value = JSON.parse(JSON.stringify(sessionData.registration[index]));
+					old_value.paid = !paid;
+
+					SessionLogUpdate(eventType='update', oldValue=old_value, newValue=new_value);
+					
+					const update_result = await updateSessionData();
+
+					if (update_result.status === 'fail') {
+						box.target.checked = !paid; // roll back checkbox on error
+						sessionData.log.pop();
+					}
+					
+				});
+			});
+
+			// Attach event listeners to cancel buttons
+			document.querySelectorAll(".cancel-btn").forEach(button => {
+				button.addEventListener("click", (e) => {
+					const index = Number(e.target.dataset.index);
+					cancelRegistration(index);
+				});
+			});
+		}
+
+		// Render waitlist table
+		function renderWaitlist() {
+			const tbody = document.getElementById("waitlist-table-body");
+			tbody.innerHTML = "";
+
+			for (let i = 0; i < sessionData.waitlist.length; i++) {
+				
+				const tr = document.createElement("tr");
+
+				const reg = sessionData.waitlist[i];
+
+				tr.innerHTML = `
+					<td>${reg.registrant_name}</td>
+					<td><button class="waitlist-register-btn" data-index="${i}">Register</button></td>
+				`;
+				tbody.appendChild(tr);
+			}
+
+			// sessionData.waitlist.forEach(reg => {
+			// 	const tr = document.createElement("tr");
+			// 	tr.innerHTML = `
+			// 		<td>${reg.name}</td>
+			// 		<td><button class="register-btn" data-index="${i}">Register</button></td>
+			// 	`;
+			// 	tbody.appendChild(tr);
+			// });
+		}
+
+		async function cancelRegistration(index) {
+			
+			const reg = sessionData.registration[index];
+			
+			// Storing the current data in case we need to revert it if update session data fails
+			const old_value = JSON.parse(JSON.stringify(sessionData.registration[index]));
+			const plc_registrant_name = reg.registrant_name;
+			const plc_paid = reg.paid;
+			
+			if (reg.registrant_name !== "") {
+				// Reset the registrant name and paid status
+				reg.registrant_name = "";
+				reg.paid = false;
+				
+				// Optionally, you can remove the user from the waitlist if you want
+				// You can skip this part if you don't want to implement this behavior
+				const waitlistIndex = sessionData.waitlist.findIndex(w => w.registrant_name === reg.registrant_name);
+				if (waitlistIndex !== -1) {
+					sessionData.waitlist.splice(waitlistIndex, 1);
+				}
+			}
+
+			SessionLogUpdate(eventType='cancel', oldValue=old_value, newValue=reg);
+
+			const update_result = await updateSessionData();
+
+			if (update_result.status === 'fail') {
+
+				// If fail, revert value back to its original
+				reg.registrant_name = plc_registrant_name;
+				reg.paid = plc_paid;
+				sessionData.log.pop();
+			}
+
+			renderRegistrants(); // Re-render the table after cancellation
+			renderWaitlist(); // Re-render the waitlist in case of waitlist change
+		}
+
+		// Handle new registration
+		document.getElementById("main-register-button").addEventListener("click", async () => {
+			const nameInput = document.getElementById("name-input");
+			const name = nameInput.value.trim();
+			if (!name) return alert("Please enter a name.");
+
+			const newReg = { registrant_name: name, paid: false };
+			
+			// Find an empty slot
+			const emptySlot = sessionData.registration.find(reg => reg.registrant_name === "");
+
+			if (emptySlot) {
+				emptySlot.registrant_name = name;
+				emptySlot.paid = false;
+			} else {
+				// If no empty slot, add to waitlist
+				sessionData.waitlist.push({ registrant_name: name});
+			}
+
+			nameInput.value = "";
+
+			const update_result = await updateSessionData();
+
+			if (update_result.status === 'fail') {
+
+				// NEED TO FIGURE OUT HOW TO CANCEL REGISTRATION IF THERE'S AN ERROR
+				// If fail, revert value back to its original
+				// reg.registrant_name = plc_registrant_name;
+				// reg.paid = plc_paid;
+				sessionData.log.pop();
+			}
+
+			renderRegistrants(); // Re-render the table after cancellation
+			renderWaitlist(); // Re-render the waitlist in case of waitlist change
+
+		});
+
+		// Handle moving a registrant from the waitlist to the registration table
+		document.getElementById("waitlist-table-body").addEventListener("click", async (event) => {
+			if (event.target.classList.contains("waitlist-register-btn")) {
+				// Get the index of the registrant in the waitlist
+				const index = event.target.dataset.index;
+
+				// Check if there's an empty slot in the registration table
+				const emptySlot = sessionData.registration.find(reg => reg.registrant_name === "");
+
+				if (emptySlot) {
+					// Move the registrant from waitlist to registration table
+					const registrant = sessionData.waitlist[index];
+
+					// Find the first empty slot in the registration table and move the registrant there
+					emptySlot.registrant_name = registrant.registrant_name;
+					emptySlot.paid = false;
+
+					// Remove the registrant from the waitlist
+					sessionData.waitlist.splice(index, 1);
+
+					const update_result = await updateSessionData();
+
+					if (update_result.status === 'fail') {
+
+						// If fail, revert value back to its original
+						reg.registrant_name = plc_registrant_name;
+						reg.paid = plc_paid;
+					}
+
+					renderRegistrants(); // Re-render the table after cancellation
+					renderWaitlist(); // Re-render the waitlist in case of waitlist change
+				} else {
+					alert("No available slot in the registration table.");
+				}
+			}
+		});
+
+		const nameInput = document.getElementById("name-input");
+
+		nameInput.addEventListener("keydown", (event) => {
+			if (event.key === "Enter") {
+				event.preventDefault(); // Always prevent default form submit
+
+				const name = nameInput.value.trim(); // Get the name and remove extra spaces
+				if (name.length > 0) {
+					document.getElementById("main-register-button").click(); // Only click if there's text
+				} else {
+					alert("Please enter a name before registering.");
+				}
+			}
+		});
+
+		document.getElementById("back-to-home-btn").onclick = function() {
+			const username = getUsernameFromURL();
+			window.location.href = `/account/${username}/sessions`;
+		};
+
+		// Run loadSession to load the page with data
+		loadSession();
+
+		// This is used when using the static placeholder data
+		// Run initialization
+		// init();
+	</script>
+</body>
+</html>

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Create New Session</title>
+
+	<!-- Bootstrap CSS -->
+	<link
+		href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+		rel="stylesheet"
+	/>
+
+	<!-- Bootstrap JS bundle -->
+	<script
+		src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js">
+	</script>
+
+	<script>
+
+		function getUsernameFromURL() {
+			// Try query string first
+			const params = new URLSearchParams(window.location.search);
+			const queryUsername = params.get('username');
+			
+			if (queryUsername) {
+				return decodeURIComponent(queryUsername);
+			}
+
+			// Fallback to REST-like path: /account/username
+			const pathParts = window.location.pathname.split('/');
+			if (pathParts.length >= 3 && pathParts[1] === 'account') {
+				return decodeURIComponent(pathParts[2]);
+			}
+
+			return null; // Username not found
+		}
+
+		const username = getUsernameFromURL();
+
+		async function getLatestSessionId() {
+			try {
+				const res = await fetch(
+					`https://d2mgloh4y05lpj.cloudfront.net/api/account/${username}/sessions`, {
+						method: 'GET',
+						headers: { 'Content-Type': 'application/json' }
+					}
+				);
+
+				if (!res.ok) {
+					throw new Error('Failed to fetch sessions: ' + res.statusText);
+				}
+
+				const sessionsData = await res.json();
+				
+				let highestSessionId;
+				// get the highest session_id from the sessionsData
+				if (sessionsData.length > 0) {
+					highestSessionId = sessionsData.reduce(
+						(max, obj) => Number(obj.session_id) > max ? Number(obj.session_id) : max,
+						0
+					);
+				} else if (sessionsData.length === 0) 
+				// If no sessions exist, start from 1000
+				{
+					highestSessionId = 1000;
+				}
+
+				return Number(highestSessionId);
+				
+			} catch (error) {
+				console.error('Error fetching sessions:', error);
+				document.body.innerHTML = `<p class="text-danger">Failed to load sessions: ${err.message}</p>`;
+
+				return null; // Return null if there's an error
+			}
+		}
+
+		let accountData = null;
+		async function getAccountData() {
+			try {
+				const res = await fetch("https://d2mgloh4y05lpj.cloudfront.net/api/login", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ username })
+				});
+
+				const accountData = await res.json();
+				return accountData;
+			} catch (err) {
+				document.getElementById("error-msg").textContent = "Network error. Please try again.";
+				return null;
+			}
+		}
+
+		function createRegistrationList(capacity) {
+			
+			const list = [];
+			
+			for (let i = 1; i <= capacity; i++) {
+				list.push({
+					slot: i,
+					registrant_name: "",
+					paid: false
+				});
+			}
+			return list;
+		}
+
+		async function createSession(event, accountData) {
+			event.preventDefault(); // Prevent form submission
+			
+			const newSessionId = (await getLatestSessionId()) + 1;
+			const newSK = `SESSION#${newSessionId}`;
+			const sessionCapacity = parseInt(document.getElementById('capacity').value, 10);
+			const registrationList = createRegistrationList(sessionCapacity);
+
+			const sessionData = {
+				PK: username,
+				SK: newSK,
+				type: 'session',
+				session_id: Number(newSessionId),
+				group_name: accountData.group_name,
+				host_name: document.getElementById('hostName').value.trim(),
+				capacity: sessionCapacity,
+				session_start: document.getElementById('sessionStart').value,
+				session_end: document.getElementById('sessionEnd').value,
+				location: document.getElementById('location').value.trim(),
+				description: document.getElementById('description').value.trim(),
+				fee_per_pax: parseFloat(document.getElementById('feePerPax').value),
+				registration: registrationList,
+				waitlist: [],
+				created_at: new Date().toISOString(),
+				updated_at: new Date().toISOString(),
+				log: []
+			};
+
+			try {
+				const res = await fetch(`https://d2mgloh4y05lpj.cloudfront.net/api/account/${username}/session`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(sessionData)
+				});
+
+				if (!res.ok) {
+					throw new Error('Failed to create session: ' + res.statusText);
+				}
+
+				alert('Session created successfully!');
+				window.location.href = '/account/' + username + '/sessions'; // Redirect back to home page
+			} catch (error) {
+				console.error('Error creating session:', error);
+				alert('Failed to create session. Please try again.');
+			}
+		}
+
+		document.getElementById("back-to-home-btn").onclick = function() {
+			const username = getUsernameFromURL();
+			window.location.href = `/account/${username}/sessions`;
+		};
+
+		// Add this at the end of your <script> tag:
+		document.addEventListener("DOMContentLoaded", async function() {
+
+			accountData = await getAccountData(); // 2. Fetch once and assign
+
+			if (accountData && accountData.host_name) {
+				document.getElementById('hostName').value = accountData.host_name;
+			}
+			else {
+				alert('Failed to load account data. Please try again.');
+			}
+
+			document.getElementById('createSessionForm').addEventListener('submit', function(event) {
+				createSession(event, accountData);
+			});
+		});
+	</script>
+</head>
+
+<body class="bg-light">
+	<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+		<div class="container-fluid">
+			<span class="navbar-brand">🏸 Simple Signup</span>
+			<button class="btn btn-outline-light ms-auto" id="back-to-home-btn" >Back to Home</button>
+		</div>
+	</nav>
+
+	<main class="container py-4">
+		<h1 class="h3 mb-4">Create New Session</h1>
+		<form id="createSessionForm">
+			<div class="mb-3">
+				<label for="hostName" class="form-label">Host Name</label>
+				<input type="text" class="form-control" id="hostName" required />
+			</div>
+			<div class="mb-3">
+				<label for="location" class="form-label">Location</label>
+				<input type="text" class="form-control" id="location" required />
+			</div>
+			<div class="mb-3">
+				<label for="sessionStart" class="form-label">Session Start</label>
+				<input type="datetime-local" class="form-control" id="sessionStart" required />
+			</div>
+			<div class="mb-3">
+				<label for="sessionEnd" class="form-label">Session End</label>
+				<input type="datetime-local" class="form-control" id="sessionEnd" required />
+			</div>
+			<div class="mb-3">
+				<label for="capacity" class="form-label">Capacity</label>
+				<input type="number" class="form-control" id="capacity" required step="1" min="1" />
+			</div>
+			<div class="mb-3">
+				<label for="description" class="form-label">Description</label>
+				<textarea class="form-control" id="description" rows="3" required></textarea>
+			</div>
+			<div class="mb-3">
+				<label for="feePerPax" class="form-label">Fee Per Participant</label>
+				<input type="number" class="form-control" id="feePerPax" step="0.01" required />
+			</div>
+			<button type="submit" class="btn btn-primary">Create Session</button>
+		</form>
+	</main>
+</body>
+</html>

@@ -11,11 +11,14 @@ def lambda_handler(event, context):
 
 	logger.info("FULL EVENT: " + json.dumps(event, default=str))
 	
-	username = event["pathParameters"]["username"]
-	raw_session_id = event["pathParameters"]["id"]
+	body = json.loads(event['body'])
+	username = body.get('username')
 
-	# session_id = int(raw_id)
-	session_id = f"SESSION#{raw_session_id}"
+	if username == '' or username is None:
+		return {
+			"statusCode": 400,
+			"body": json.dumps({"error": "Username is required"})
+		}
 
 	dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
 	table = dynamodb.Table("AppData")
@@ -27,24 +30,28 @@ def lambda_handler(event, context):
 		resp = table.get_item(
 			Key={
 				'PK': username,
-				'SK': session_id
+				'SK': 'ACCOUNT'
 			}
 		)
 
-		if "Item" not in resp:
-			return {
-				"statusCode": 404,
-				"body": json.dumps({"message": "Session not found"})
-			}
-		else:
-			
-			session_data = resp.get('Item')
+		item = resp['Item']
 
+		# If item exists
+		if item :
+			session_data = item
 			return {
 				"statusCode": 200,
 				"body": json.dumps(session_data, default=str),
 				"headers": {"Content-Type": "application/json"}
 			}
+			
+		# If item does not exist
+		else:	
+			return {
+				"statusCode": 404,
+				"body": json.dumps({"message": "Username not found"})
+			}
+		
 	except ClientError as e:
 		return {
 			"statusCode": 500,

@@ -19,7 +19,7 @@ def lambda_handler(event, context):
 
 	pk = update_data['PK'] # partition key
 	sk = update_data['SK'] # sort key
-	registrations = update_data['registrations']
+	registration = update_data['registration']
 
 	try:
 		response = table.update_item(
@@ -27,9 +27,9 @@ def lambda_handler(event, context):
 				'PK': pk,
 				'SK': sk
 			},
-			UpdateExpression='SET registrations = :r',
+			UpdateExpression='SET registration = :r',
 			ExpressionAttributeValues={
-				':r': registrations
+				':r': registration
 			},
 			ReturnValues='UPDATED_NEW'
 		)
