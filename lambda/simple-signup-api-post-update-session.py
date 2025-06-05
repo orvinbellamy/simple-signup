@@ -20,6 +20,7 @@ def lambda_handler(event, context):
 	pk = update_data['PK'] # partition key
 	sk = update_data['SK'] # sort key
 	registration = update_data['registration']
+	waitlist = update_data['waitlist']
 
 	try:
 		response = table.update_item(
@@ -27,9 +28,10 @@ def lambda_handler(event, context):
 				'PK': pk,
 				'SK': sk
 			},
-			UpdateExpression='SET registration = :r',
+			UpdateExpression='SET registration = :r, waitlist = :w',
 			ExpressionAttributeValues={
-				':r': registration
+				':r': registration,
+				':w': waitlist
 			},
 			ReturnValues='UPDATED_NEW'
 		)
@@ -38,6 +40,10 @@ def lambda_handler(event, context):
 
 		return {
 			'statusCode': 200,
+			'headers': {
+				'Cache-Control': 'no-store',
+				'Pragma': 'no-cache'
+			},
 			'body': json.dumps({
 				'message': 'Registrations updated',
 				'session': response.get('Attributes', {})

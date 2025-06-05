@@ -48,6 +48,10 @@ def lambda_handler(event, context):
 
 		return {
 			'statusCode': 200,
+			'headers': {
+				'Cache-Control': 'no-store',
+				'Pragma': 'no-cache'
+			},
 			'body': json.dumps({
 				'message': 'Registrations updated',
 				'session': response.get('Attributes', {})

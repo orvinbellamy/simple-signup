@@ -43,6 +43,7 @@
 				const res = await fetch(
 					`https://d2mgloh4y05lpj.cloudfront.net/api/account/${username}/sessions`, {
 						method: 'GET',
+						cache: 'no-store',
 						headers: { 'Content-Type': 'application/json' }
 					}
 				);

@@ -128,6 +128,7 @@
 			try {
 				const res = await fetch(`https://d2mgloh4y05lpj.cloudfront.net/api/account/${username}/session/${sessionId}`, {
 					method: 'GET',
+					cache: 'no-store',
 					headers: { 'Content-Type': 'application/json' }
 				});
 				if (!res.ok) {

@@ -42,6 +42,10 @@ def lambda_handler(event, context):
 
 			return {
 				"statusCode": 200,
+				'headers': {
+					'Cache-Control': 'no-store',
+					'Pragma': 'no-cache'
+				},
 				"body": json.dumps(session_data, default=str),
 				"headers": {"Content-Type": "application/json"}
 			}
